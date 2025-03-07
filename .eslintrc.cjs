@@ -65,6 +65,8 @@ module.exports = {
     'import/no-extraneous-dependencies': ['error', { devDependencies: ['**/*.test.ts', '**/*.test.tsx'] }],
     // Allow one word components
     'vue/multi-word-component-names': 'off',
+    "import/extensions": ["error", "ignorePackages"],
+    "import/no-extraneous-dependencies": ["error", { "devDependencies": true }]
   },
   // typescript definition for timer IDs
   globals: { NodeJS: true },

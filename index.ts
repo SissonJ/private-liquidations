@@ -1,26 +1,14 @@
+import * as fs from 'fs';
 import { config } from 'dotenv';
 import {
   MsgExecuteContract,
- SecretNetworkClient, TxResponse, Wallet 
+  SecretNetworkClient, 
+  TxResponse, 
+  Wallet 
 } from 'secretjs';
-import { PrivateLiquidatableResponse } from './types';
-
-config();
-
-const client = new SecretNetworkClient({
-  url: process.env.NODE!,
-  chainId: process.env.CHAIN_ID!,
-  wallet: new Wallet(process.env.ARB_V4!),
-  walletAddress: process.env.WALLET_ADDRESS!,
-  encryptionSeed: Uint8Array.from(process.env.ENCRYPTION_SEED!.split(',').map(Number)),
-});
-let lastRoute = 0;
-let retry = 0;
-let txHash: string | undefined = undefined;
-const start = new Date().getTime();
-const successfulLiquidations = 0;
-const failedLiquidations = 0;
-let totalAttempts = 0;
+import {
+ PrivateLiquidatableResponse, State 
+} from './types';
 
 const getCentralTime = (date: Date): string => {
   return date.toLocaleString('en-US', {
@@ -36,14 +24,49 @@ const getCentralTime = (date: Date): string => {
 };
 
 const logger = {
-  error: (msg: string, time: Date, error?: any) => console.error(`[${getCentralTime(time)} ERROR] ${msg}`, error),
-  info: (msg: string, time: Date) => console.log(`[${getCentralTime(time)} INFO] ${msg}`),
+  error: (msg: string, time: Date, error?: any) => {
+    console.error(`[${getCentralTime(time)} ERROR] ${msg}`, error);
+  },
+  info: (msg: string, time: Date) => {
+    console.log(`[${getCentralTime(time)} INFO] ${msg}`);
+  }
 };
 
+config();
+
+const client = new SecretNetworkClient({
+  url: process.env.NODE!,
+  chainId: process.env.CHAIN_ID!,
+  wallet: new Wallet(process.env.ARB_V4!),
+  walletAddress: process.env.WALLET_ADDRESS!,
+  encryptionSeed: Uint8Array.from(process.env.ENCRYPTION_SEED!.split(',').map(Number)),
+});
+
 async function main() {
+  if (!fs.existsSync('./state.txt')) {
+    const initialState: State = {
+      totalAttempts: 0,
+      successfulLiquidations: 0,
+      failedLiquidations: 0,
+      txHash: undefined,
+      attempts: {}
+    };
+    fs.writeFileSync('./state.txt', JSON.stringify(initialState));
+  }
+
+  const stateUnparsed = fs.readFileSync('./state.txt', 'utf-8');
+  const state: State = JSON.parse(stateUnparsed);
+
   const now = new Date();
-  if ((now.getTime() - start > 7_200_000 && (now.getTime() - start) % 7_200_000 < 10_000) || now.getTime() - start < 15_000) {
-    logger.info(`Bot running for ${Math.floor((now.getTime() - start) / 3600000)} hours, totalAttempts: ${totalAttempts}, successful: ${successfulLiquidations}, failed: ${failedLiquidations}`, now);
+  const start = state.start || now.getTime();
+  if(state.start === undefined) {
+    state.start = now.getTime();
+  }
+  if ((now.getTime() - start > 7_200_000 
+    && (now.getTime() - start) % 7_200_000 < 10_000) 
+    || now.getTime() - start < 15_000
+  ) {
+    logger.info(`Bot running for ${Math.floor((now.getTime() - start) / 3600000)} hours, totalAttempts: ${state.totalAttempts}, successful: ${state.successfulLiquidations}, failed: ${state.failedLiquidations}`, now);
   }
   const response = await client.query.compute.queryContract<any, PrivateLiquidatableResponse>({
     contract_address: process.env.MONEY_MARKET_ADDRESS!,
@@ -51,15 +74,23 @@ async function main() {
     query: { private_liquidatable: {}, },
   });
   if (response.data.length > 0) {
-    const liquidatable = response.data[lastRoute % response.data.length];
+    const liquidatable = response.data[state.totalAttempts % response.data.length];
+
+    if(state.attempts[liquidatable.id] && state.attempts[liquidatable.id] > now.getTime() - 30_000) {
+      logger.info(`SKIPPING - id: ${liquidatable.id} 30 cooldown`, now);
+      return;
+    } else if(state.attempts[liquidatable.id]) {
+      delete state.attempts[liquidatable.id];
+    }
+    state.attempts[liquidatable.id] = now.getTime();
+
     try {
       let executeResponse: TxResponse | null = null; 
-      if(txHash) {
-        await new Promise((resolve) => setTimeout(resolve, 10_000));
-        executeResponse = await client.query.getTx(txHash);
+      if(state.txHash) {
+        executeResponse = await client.query.getTx(state.txHash);
       } else {
-        logger.info(`ATTEMPTING - id: ${liquidatable.id} routes: liquidatable.routes`, now);
-        totalAttempts += 1;
+        logger.info(`ATTEMPTING - id: ${liquidatable.id} routes: ${liquidatable.routes}`, now);
+        state.totalAttempts += 1;
         executeResponse = await client.tx.broadcast([new MsgExecuteContract({ 
             sender: client.address, 
             contract_address: process.env.MONEY_MARKET_ADDRESS!,
@@ -67,32 +98,32 @@ async function main() {
             msg: {
                private_liquidate: {
                  account_id: String(liquidatable.id), 
-                 route_index: String(lastRoute) 
+                 route_index: String(state.totalAttempts) 
               } 
             }, 
             sent_funds: [],
           })],
           {
-            gasLimit: 1500000,
+            gasLimit: 4000000,
             feeDenom: "uscrt",
           },
         )
       }
       if(executeResponse === null) {
-        throw new Error(`Transaction not found ${txHash}`);
+        throw new Error(`Transaction not found ${state.txHash}`);
       }
       if(executeResponse.code === 0) {
         logger.info(`LIQUIDATION ATTEMPT SUCCESSFUL - ${executeResponse.transactionHash}`, now);
         if(!executeResponse.arrayLog && !executeResponse.jsonLog) {
-          txHash = executeResponse.transactionHash;
+          state.txHash = executeResponse.transactionHash;
           throw new Error("Missing log - liquidate");
         }
         logger.info(JSON.stringify(executeResponse.arrayLog), now);
         logger.info(JSON.stringify(executeResponse.jsonLog), now);
-        txHash = undefined;
+        state.txHash = undefined;
       } else {
         if(executeResponse.rawLog === undefined || executeResponse.rawLog.length === 0) {
-          txHash = executeResponse.transactionHash;
+          state.txHash = executeResponse.transactionHash;
           throw new Error("Missing log");
         }
         logger.info(JSON.stringify(executeResponse.arrayLog), now);
@@ -104,26 +135,12 @@ async function main() {
       if(executeResponse.rawLog?.includes("out of gas")){
         throw new Error("out of gas");
       }
-      retry = 0;
     } catch (e: any) {
-      if(retry > 10) {
-        retry = 0;
-      } else {
-        retry += 1;
-        logger.error(e?.message, now);
-      }
+      logger.error(e?.message, now);
     }
-    lastRoute = lastRoute + 1;
   }
+  fs.writeFileSync('./state.txt', JSON.stringify(state));
 }
 
 console.log("PROCESS PID: ", process.pid);
-setInterval(async () => {
-  try{
-    await main();
-  } catch(e) {
-    console.log('Error in setInterval');
-    console.log(e);
-  }
-}, 10_000);
-
+Promise.resolve(main());
