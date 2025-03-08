@@ -66,7 +66,7 @@ async function main() {
     state.start = now.getTime();
   }
  if ((now.getTime() - start > 7_200_000 
-    && (now.getTime() - start) % 7_200_000 < 10_000) 
+    && (now.getTime() - start) % 7_200_000 < 1_000) 
     || now.getTime() - start < 15_000
   ) {
     logger.info(`Bot running for ${Math.floor((now.getTime() - start) / 3600000)} hours, totalAttempts: ${state.totalAttempts}, successful: ${state.successfulLiquidations}, failed: ${state.failedLiquidations}, average query length: ${state.queryLength?.toFixed(4)}`, now);
