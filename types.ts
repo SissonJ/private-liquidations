@@ -4,6 +4,9 @@ type State = {
   failedLiquidations: number,
   totalAttempts: number,
   txHash: string | undefined,
+  totalPages: number,
+  queryLength?: number,
+  page: number,
   attempts: {
     [key: string]: number, // <account_id>: <timestamp>
   },
@@ -15,6 +18,7 @@ type PrivateLiquidatableResponseItem = {
 }
 
 type PrivateLiquidatableResponse = {
+  total_pages: number,
   data: PrivateLiquidatableResponseItem[],
 }
 

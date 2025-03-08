@@ -7,7 +7,8 @@ import {
   Wallet 
 } from 'secretjs';
 import {
- PrivateLiquidatableResponse, State 
+ PrivateLiquidatableResponse, 
+ State 
 } from './types';
 
 const getCentralTime = (date: Date): string => {
@@ -48,6 +49,8 @@ async function main() {
       totalAttempts: 0,
       successfulLiquidations: 0,
       failedLiquidations: 0,
+      totalPages: 1,
+      page: 0,
       txHash: undefined,
       attempts: {}
     };
@@ -62,17 +65,29 @@ async function main() {
   if(state.start === undefined) {
     state.start = now.getTime();
   }
-  if ((now.getTime() - start > 7_200_000 
+ if ((now.getTime() - start > 7_200_000 
     && (now.getTime() - start) % 7_200_000 < 10_000) 
     || now.getTime() - start < 15_000
   ) {
-    logger.info(`Bot running for ${Math.floor((now.getTime() - start) / 3600000)} hours, totalAttempts: ${state.totalAttempts}, successful: ${state.successfulLiquidations}, failed: ${state.failedLiquidations}`, now);
+    logger.info(`Bot running for ${Math.floor((now.getTime() - start) / 3600000)} hours, totalAttempts: ${state.totalAttempts}, successful: ${state.successfulLiquidations}, failed: ${state.failedLiquidations}, average query length: ${state.queryLength?.toFixed(4)}`, now);
   }
+  const beforeQuery = new Date().getTime();
   const response = await client.query.compute.queryContract<any, PrivateLiquidatableResponse>({
     contract_address: process.env.MONEY_MARKET_ADDRESS!,
     code_hash: process.env.MONEY_MARKET_HASH!,
-    query: { private_liquidatable: {}, },
+    query: { 
+      private_liquidatable: { 
+        pagination: {
+          page: state.page, 
+          page_size: 10,
+        }
+      }, 
+    },
   });
+  const queryLength = (new Date().getTime() - beforeQuery) / 1000;
+  state.queryLength = state.queryLength ? (state.queryLength + queryLength) / 2 : queryLength;
+  state.totalPages = response.total_pages;
+  state.page = (state.page + 1) % state.totalPages;
   if (response.data.length > 0) {
     const liquidatable = response.data[state.totalAttempts % response.data.length];
 
@@ -142,5 +157,4 @@ async function main() {
   fs.writeFileSync('./state.txt', JSON.stringify(state));
 }
 
-console.log("PROCESS PID: ", process.pid);
 Promise.resolve(main());
