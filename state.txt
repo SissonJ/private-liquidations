@@ -1,1 +1,1 @@
-{"totalAttempts":500,"successfulLiquidations":0,"failedLiquidations":0,"totalPages":6,"page":2,"attempts":{"34":1741472461639,"47":1741451843827,"49":1741452769456},"queryLength":0.4728058968504575,"start":1741475463790}
+{"totalAttempts":500,"successfulLiquidations":0,"failedLiquidations":0,"totalPages":6,"page":0,"attempts":{"34":1741472461639,"47":1741451843827,"49":1741452769456},"queryLength":0.41103968599552315,"start":1741475463790}
