@@ -11,8 +11,24 @@ import {
  State 
 } from './types';
 
-const getCentralTime = (date: Date): string => {
-  return date.toLocaleString('en-US', {
+const CONSTANTS = {
+  // Time constants (in milliseconds)
+  STATUS_REPORT_INTERVAL: 7_200_000, // 2 hours
+  INITIAL_REPORT_THRESHOLD: 15_000,   // 15 seconds
+  ATTEMPT_COOLDOWN: 30_000,          // 30 seconds
+  ONE_SECOND: 1_000,          // one second 
+  ONE_HOUR: 3_600_000,          // one hour
+  
+  // Pagination
+  PAGE_SIZE: 10,
+  
+  // Transaction settings
+  GAS_LIMIT: 5_000_000,
+  FEE_DENOM: 'uscrt',
+  
+  // Time format settings
+  TIME_ZONE: 'America/Chicago',
+  DATE_FORMAT: {
     timeZone: 'America/Chicago',
     year: 'numeric',
     month: '2-digit',
@@ -21,7 +37,17 @@ const getCentralTime = (date: Date): string => {
     minute: '2-digit',
     second: '2-digit',
     hour12: false
-  }).replace(/(\d+)\/(\d+)\/(\d+)/, '$3-$1-$2');
+  }
+} as const;
+
+const getCentralTime = (date: Date): string => {
+  return date.toLocaleString(
+    'en-US', 
+    CONSTANTS.DATE_FORMAT
+  ).replace(
+    /(\d+)\/(\d+)\/(\d+)/, 
+    '$3-$1-$2'
+  );
 };
 
 const logger = {
@@ -34,6 +60,17 @@ const logger = {
 };
 
 config();
+
+if (!process.env.NODE 
+    || !process.env.CHAIN_ID 
+    || !process.env.ARB_V4 
+    || !process.env.WALLET_ADDRESS 
+    || !process.env.ENCRYPTION_SEED
+    || !process.env.MONEY_MARKET_ADDRESS
+    || !process.env.MONEY_MARKET_HASH
+) {
+  throw new Error("Missing environment variables");
+}
 
 const client = new SecretNetworkClient({
   url: process.env.NODE!,
@@ -65,11 +102,24 @@ async function main() {
   if(state.start === undefined) {
     state.start = now.getTime();
   }
+<<<<<<< Updated upstream
  if ((now.getTime() - start > 7_200_000 
     && (now.getTime() - start) % 7_200_000 < 1_000) 
     || now.getTime() - start < 15_000
+=======
+ if ((now.getTime() - start > CONSTANTS.STATUS_REPORT_INTERVAL 
+    && (now.getTime() - start) % CONSTANTS.STATUS_REPORT_INTERVAL < CONSTANTS.ONE_SECOND) 
+    || now.getTime() - start < CONSTANTS.INITIAL_REPORT_THRESHOLD
+>>>>>>> Stashed changes
   ) {
-    logger.info(`Bot running for ${Math.floor((now.getTime() - start) / 3600000)} hours, totalAttempts: ${state.totalAttempts}, successful: ${state.successfulLiquidations}, failed: ${state.failedLiquidations}, average query length: ${state.queryLength?.toFixed(4)}`, now);
+    logger.info(
+      `Bot running for ${Math.floor((now.getTime() - start) / CONSTANTS.ONE_HOUR)} hours\n` +
+      `  Total Attempts: ${state.totalAttempts}\n` +
+      `  Successful: ${state.successfulLiquidations}\n` +
+      `  Failed: ${state.failedLiquidations}\n` +
+      `  Average Query Length: ${state.queryLength?.toFixed(4)}`,
+      now
+    );
   }
   const beforeQuery = new Date().getTime();
   const response = await client.query.compute.queryContract<any, PrivateLiquidatableResponse>({
@@ -79,20 +129,20 @@ async function main() {
       private_liquidatable: { 
         pagination: {
           page: state.page, 
-          page_size: 10,
+          page_size: CONSTANTS.PAGE_SIZE,
         }
       }, 
     },
   });
-  const queryLength = (new Date().getTime() - beforeQuery) / 1000;
+  const queryLength = (new Date().getTime() - beforeQuery) / CONSTANTS.ONE_SECOND;
   state.queryLength = state.queryLength ? (state.queryLength + queryLength) / 2 : queryLength;
   state.totalPages = response.total_pages;
   state.page = (state.page + 1) % state.totalPages;
   if (response.data.length > 0) {
     const liquidatable = response.data[state.totalAttempts % response.data.length];
 
-    if(state.attempts[liquidatable.id] && state.attempts[liquidatable.id] > now.getTime() - 30_000) {
-      logger.info(`SKIPPING - id: ${liquidatable.id} 30 cooldown`, now);
+    if(state.attempts[liquidatable.id] && state.attempts[liquidatable.id] > now.getTime() - CONSTANTS.ATTEMPT_COOLDOWN) {
+      logger.info(`SKIPPING - id: ${liquidatable.id} 30 second cooldown`, now);
       return;
     } else if(state.attempts[liquidatable.id]) {
       delete state.attempts[liquidatable.id];
@@ -119,8 +169,8 @@ async function main() {
             sent_funds: [],
           })],
           {
-            gasLimit: 4000000,
-            feeDenom: "uscrt",
+            gasLimit: CONSTANTS.GAS_LIMIT,
+            feeDenom: CONSTANTS.FEE_DENOM,
           },
         )
       }
