@@ -1,5 +1,6 @@
 type State = {
   start?: number,
+  lastUpdate?: number,
   successfulLiquidations: number,
   failedLiquidations: number,
   totalAttempts: number,
@@ -8,6 +9,9 @@ type State = {
   queryLength?: number,
   page: number,
   attempts: {
+    [key: string]: number, // <account_id>: <timestamp>
+  },
+  blacklist: {
     [key: string]: number, // <account_id>: <timestamp>
   },
 }

@@ -20,7 +20,7 @@ const CONSTANTS = {
   ONE_HOUR: 3_600_000,          // one hour
   
   // Pagination
-  PAGE_SIZE: 10,
+  PAGE_SIZE: 60,
   
   // Transaction settings
   GAS_LIMIT: 5_000_000,
@@ -89,7 +89,8 @@ async function main() {
       totalPages: 1,
       page: 0,
       txHash: undefined,
-      attempts: {}
+      attempts: {},
+      blacklist: {}
     };
     fs.writeFileSync('./state.txt', JSON.stringify(initialState));
   }
@@ -102,16 +103,7 @@ async function main() {
   if(state.start === undefined) {
     state.start = now.getTime();
   }
-<<<<<<< Updated upstream
- if ((now.getTime() - start > 7_200_000 
-    && (now.getTime() - start) % 7_200_000 < 1_000) 
-    || now.getTime() - start < 15_000
-=======
- if ((now.getTime() - start > CONSTANTS.STATUS_REPORT_INTERVAL 
-    && (now.getTime() - start) % CONSTANTS.STATUS_REPORT_INTERVAL < CONSTANTS.ONE_SECOND) 
-    || now.getTime() - start < CONSTANTS.INITIAL_REPORT_THRESHOLD
->>>>>>> Stashed changes
-  ) {
+ if (state.start === undefined ||  now.getTime() - (state.lastUpdate ?? 0) > 7_200_000) {
     logger.info(
       `Bot running for ${Math.floor((now.getTime() - start) / CONSTANTS.ONE_HOUR)} hours\n` +
       `  Total Attempts: ${state.totalAttempts}\n` +
@@ -138,11 +130,16 @@ async function main() {
   state.queryLength = state.queryLength ? (state.queryLength + queryLength) / 2 : queryLength;
   state.totalPages = response.total_pages;
   state.page = (state.page + 1) % state.totalPages;
-  if (response.data.length > 0) {
-    const liquidatable = response.data[state.totalAttempts % response.data.length];
 
-    if(state.attempts[liquidatable.id] && state.attempts[liquidatable.id] > now.getTime() - CONSTANTS.ATTEMPT_COOLDOWN) {
-      logger.info(`SKIPPING - id: ${liquidatable.id} 30 second cooldown`, now);
+  const blacklist = Object.keys(state.blacklist);
+  const blacklistedResponse = response.data.filter((log) => !blacklist.includes(log.id));
+
+  if (blacklistedResponse.length > 0 ) {
+    const liquidatable = blacklistedResponse[state.totalAttempts % blacklistedResponse.length];
+
+    if(state.attempts[liquidatable.id] 
+       && state.attempts[liquidatable.id] > now.getTime() - 30_000) {
+      logger.info(`SKIPPING - id: ${liquidatable.id} 30 cooldown`, now);
       return;
     } else if(state.attempts[liquidatable.id]) {
       delete state.attempts[liquidatable.id];
@@ -178,6 +175,7 @@ async function main() {
         throw new Error(`Transaction not found ${state.txHash}`);
       }
       if(executeResponse.code === 0) {
+        state.successfulLiquidations += 1;
         logger.info(`LIQUIDATION ATTEMPT SUCCESSFUL - ${executeResponse.transactionHash}`, now);
         if(!executeResponse.arrayLog && !executeResponse.jsonLog) {
           state.txHash = executeResponse.transactionHash;
@@ -191,6 +189,7 @@ async function main() {
           state.txHash = executeResponse.transactionHash;
           throw new Error("Missing log");
         }
+        state.failedLiquidations += 1;
         logger.info(JSON.stringify(executeResponse.arrayLog), now);
         logger.info(JSON.stringify(executeResponse.jsonLog), now);
       }
@@ -198,13 +197,27 @@ async function main() {
         throw new Error("account sequence");
       }
       if(executeResponse.rawLog?.includes("out of gas")){
+        state.blacklist[liquidatable.id] = now.getTime();
         throw new Error("out of gas");
+      }
+      if(executeResponse.rawLog?.includes("contract panicked")){
+        state.blacklist[liquidatable.id] = now.getTime();
+        throw new Error("panic");
       }
     } catch (e: any) {
       logger.error(e?.message, now);
     }
   }
-  fs.writeFileSync('./state.txt', JSON.stringify(state));
+  blacklist.forEach((id) => {
+    if(state.blacklist[id] < now.getTime() - 86_400_000) { // 24 hours
+      delete state.blacklist[id];
+    }
+  });
+  fs.writeFileSync('./state.txt', JSON.stringify(state, null, 2));
 }
 
-Promise.resolve(main());
+try {
+  Promise.resolve(main());
+} catch(error:any) {
+  logger.error(error?.message, new Date());
+}
