@@ -100,10 +100,11 @@ async function main() {
 
   const now = new Date();
   const start = state.start || now.getTime();
-  if(state.start === undefined) {
-    state.start = now.getTime();
-  }
  if (state.start === undefined ||  now.getTime() - (state.lastUpdate ?? 0) > 7_200_000) {
+    state.lastUpdate = now.getTime();
+    if(state.start === undefined) {
+      state.start = now.getTime();
+    }
     logger.info(
       `Bot running for ${Math.floor((now.getTime() - start) / CONSTANTS.ONE_HOUR)} hours\n` +
       `  Total Attempts: ${state.totalAttempts}\n` +
