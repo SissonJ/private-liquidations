@@ -187,6 +187,11 @@ async function main() {
         }
         logger.info(JSON.stringify(executeResponse.jsonLog), now);
         state.txHash = undefined;
+        fs.appendFile('../transactions.txt', 
+          `${now.getTime()},${executeResponse.transactionHash},private\n`, 
+          (err) => {
+            if (err) logger.error('Failed to append transaction hash', now, err);    }
+        );
       } else {
         if(executeResponse.rawLog === undefined || executeResponse.rawLog.length === 0) {
           state.txHash = executeResponse.transactionHash;
