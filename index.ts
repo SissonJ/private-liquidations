@@ -16,8 +16,10 @@ const CONSTANTS = {
   STATUS_REPORT_INTERVAL: 7_200_000, // 2 hours
   INITIAL_REPORT_THRESHOLD: 15_000,   // 15 seconds
   ATTEMPT_COOLDOWN: 30_000,          // 30 seconds
+  THREE_SECONDS: 3_000,          // THREE seconds 
   ONE_SECOND: 1_000,          // one second 
   ONE_HOUR: 3_600_000,          // one hour
+  ONE_DAY: 86_400_000,          // one day
   
   // Pagination
   PAGE_SIZE: 60,
@@ -100,7 +102,8 @@ async function main() {
 
   const now = new Date();
   const start = state.start || now.getTime();
- if (state.start === undefined ||  now.getTime() - (state.lastUpdate ?? 0) > 7_200_000) {
+ if (state.start === undefined 
+   ||  now.getTime() - (state.lastUpdate ?? 0) > CONSTANTS.STATUS_REPORT_INTERVAL) {
     state.lastUpdate = now.getTime();
     if(state.start === undefined) {
       state.start = now.getTime();
@@ -139,7 +142,7 @@ async function main() {
     const liquidatable = blacklistedResponse[state.totalAttempts % blacklistedResponse.length];
 
     if(state.attempts[liquidatable.id] 
-       && state.attempts[liquidatable.id] > now.getTime() - 30_000) {
+       && state.attempts[liquidatable.id] > now.getTime() - CONSTANTS.ATTEMPT_COOLDOWN) {
       logger.info(`SKIPPING - id: ${liquidatable.id} 30 cooldown`, now);
       return;
     } else if(state.attempts[liquidatable.id]) {
@@ -182,7 +185,6 @@ async function main() {
           state.txHash = executeResponse.transactionHash;
           throw new Error("Missing log - liquidate");
         }
-        logger.info(JSON.stringify(executeResponse.arrayLog), now);
         logger.info(JSON.stringify(executeResponse.jsonLog), now);
         state.txHash = undefined;
       } else {
@@ -191,7 +193,6 @@ async function main() {
           throw new Error("Missing log");
         }
         state.failedLiquidations += 1;
-        logger.info(JSON.stringify(executeResponse.arrayLog), now);
         logger.info(JSON.stringify(executeResponse.jsonLog), now);
       }
       if(executeResponse.rawLog?.includes("incorrect account sequence")) {
@@ -210,7 +211,7 @@ async function main() {
     }
   }
   blacklist.forEach((id) => {
-    if(state.blacklist[id] < now.getTime() - 86_400_000) { // 24 hours
+    if(state.blacklist[id] < now.getTime() - CONSTANTS.ONE_DAY) { // 24 hours
       delete state.blacklist[id];
     }
   });
