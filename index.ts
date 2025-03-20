@@ -198,7 +198,8 @@ async function main() {
       if(executeResponse.rawLog?.includes("incorrect account sequence")) {
         throw new Error("account sequence");
       }
-      if(executeResponse.rawLog?.includes("out of gas")){
+      if(executeResponse.rawLog?.includes("out of gas") 
+        || executeResponse.rawLog?.includes("insufficient funds")) {
         state.blacklist[liquidatable.id] = now.getTime();
         throw new Error("out of gas");
       }
