@@ -109,10 +109,10 @@ async function main() {
       state.start = now.getTime();
     }
     logger.info(
-      `Bot running for ${Math.floor((now.getTime() - start) / CONSTANTS.ONE_HOUR)} hours\n` +
-      `  Total Attempts: ${state.totalAttempts}\n` +
-      `  Successful: ${state.successfulLiquidations}\n` +
-      `  Failed: ${state.failedLiquidations}\n` +
+      `Bot running for ${Math.floor((now.getTime() - start) / CONSTANTS.ONE_HOUR)} hours ` +
+      `  Total Attempts: ${state.totalAttempts} ` +
+      `  Successful: ${state.successfulLiquidations} ` +
+      `  Failed: ${state.failedLiquidations} ` +
       `  Average Query Length: ${state.queryLength?.toFixed(4)}`,
       now
     );
@@ -224,8 +224,4 @@ async function main() {
   fs.writeFileSync('./state.txt', JSON.stringify(state, null, 2));
 }
 
-try {
-  Promise.resolve(main());
-} catch(error:any) {
-  logger.error(error?.message, new Date());
-}
+main().catch((error:any) => {logger.error(error?.message, new Date());});
