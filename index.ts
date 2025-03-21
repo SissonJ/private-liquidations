@@ -109,10 +109,10 @@ async function main() {
       state.start = now.getTime();
     }
     logger.info(
-      `Bot running for ${Math.floor((now.getTime() - start) / CONSTANTS.ONE_HOUR)} hours\n` +
-      `  Total Attempts: ${state.totalAttempts}\n` +
-      `  Successful: ${state.successfulLiquidations}\n` +
-      `  Failed: ${state.failedLiquidations}\n` +
+      `Bot running for ${Math.floor((now.getTime() - start) / CONSTANTS.ONE_HOUR)} hours, ` +
+      `  Total Attempts: ${state.totalAttempts}, ` +
+      `  Successful: ${state.successfulLiquidations}, ` +
+      `  Failed: ${state.failedLiquidations}, ` +
       `  Average Query Length: ${state.queryLength?.toFixed(4)}`,
       now
     );
@@ -174,6 +174,13 @@ async function main() {
             feeDenom: CONSTANTS.FEE_DENOM,
           },
         )
+        if(executeResponse?.transactionHash !== undefined) {
+          fs.appendFile('../transactions.txt', 
+            `${now.getTime()},${executeResponse.transactionHash},private\n`, 
+            (err) => {
+              if (err) logger.error('Failed to append transaction hash', now, err);    }
+          );
+        }
       }
       if(executeResponse === null) {
         throw new Error(`Transaction not found ${state.txHash}`);
@@ -187,11 +194,6 @@ async function main() {
         }
         logger.info(JSON.stringify(executeResponse.jsonLog), now);
         state.txHash = undefined;
-        fs.appendFile('../transactions.txt', 
-          `${now.getTime()},${executeResponse.transactionHash},private\n`, 
-          (err) => {
-            if (err) logger.error('Failed to append transaction hash', now, err);    }
-        );
       } else {
         if(executeResponse.rawLog === undefined || executeResponse.rawLog.length === 0) {
           state.txHash = executeResponse.transactionHash;
