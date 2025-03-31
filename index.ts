@@ -109,13 +109,16 @@ async function main() {
     if(state.start === undefined) {
       state.start = now.getTime();
     }
+    const queryLength = state.queryLength !== undefined 
+      ? state?.queryLength?.reduce((acc, curr) => acc + curr, 0) / (state?.queryLength?.length || 1)
+      : -1;
     logger.info(
       `Bot running for ${Math.floor((now.getTime() - start) / CONSTANTS.ONE_HOUR)} hours ` +
       `  Total Attempts: ${state.totalAttempts} ` +
       `  Successful: ${state.successfulLiquidations} ` +
       `  Failed: ${state.failedLiquidations} ` +
       `  Queries Failed: ${state.queryErrors} ` +
-      `  Average Query Length: ${state.queryLength?.toFixed(4)}`,
+      `  Average Query Length: ${queryLength.toFixed(4)}`,
       now
     );
     state.queryErrors = 0; // reset query errors after logging
@@ -145,12 +148,19 @@ async function main() {
   }
 
   if(response === undefined) {
+    state.queryErrors += 1;
     fs.writeFileSync('./state.txt', JSON.stringify(state, null, 2));
     return;
   }
 
   const queryLength = (new Date().getTime() - beforeQuery) / CONSTANTS.ONE_SECOND;
-  state.queryLength = state.queryLength ? (state.queryLength + queryLength) / 2 : queryLength;
+  state.queryLength !== undefined 
+    ? state.queryLength.push(queryLength) 
+    : state.queryLength = [queryLength];
+  if(state.queryLength.length > 100) {
+    // Keep the last 10 query lengths for average calculation
+    state.queryLength.shift();
+  }
   state.totalPages = response.total_pages;
   state.page = (state.page + 1) % state.totalPages;
 

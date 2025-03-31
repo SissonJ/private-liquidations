@@ -6,7 +6,7 @@ type State = {
   totalAttempts: number,
   txHash: string | undefined,
   totalPages: number,
-  queryLength?: number,
+  queryLength?: number[],
   page: number,
   queryErrors: number,
   attempts: {
