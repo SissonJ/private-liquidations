@@ -8,6 +8,7 @@ type State = {
   totalPages: number,
   queryLength?: number,
   page: number,
+  queryErrors: number,
   attempts: {
     [key: string]: number, // <account_id>: <timestamp>
   },

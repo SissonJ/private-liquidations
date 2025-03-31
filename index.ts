@@ -90,6 +90,7 @@ async function main() {
       failedLiquidations: 0,
       totalPages: 1,
       page: 0,
+      queryErrors: 0,
       txHash: undefined,
       attempts: {},
       blacklist: {}
@@ -113,23 +114,41 @@ async function main() {
       `  Total Attempts: ${state.totalAttempts} ` +
       `  Successful: ${state.successfulLiquidations} ` +
       `  Failed: ${state.failedLiquidations} ` +
+      `  Queries Failed: ${state.queryErrors} ` +
       `  Average Query Length: ${state.queryLength?.toFixed(4)}`,
       now
     );
+    state.queryErrors = 0; // reset query errors after logging
   }
   const beforeQuery = new Date().getTime();
-  const response = await client.query.compute.queryContract<any, PrivateLiquidatableResponse>({
-    contract_address: process.env.MONEY_MARKET_ADDRESS!,
-    code_hash: process.env.MONEY_MARKET_HASH!,
-    query: { 
-      private_liquidatable: { 
-        pagination: {
-          page: state.page, 
-          page_size: CONSTANTS.PAGE_SIZE,
-        }
-      }, 
-    },
-  });
+  let response;
+  try {
+    response = await client.query.compute.queryContract<any, PrivateLiquidatableResponse>({
+      contract_address: process.env.MONEY_MARKET_ADDRESS!,
+      code_hash: process.env.MONEY_MARKET_HASH!,
+      query: { 
+        private_liquidatable: { 
+          pagination: {
+            page: state.page, 
+            page_size: CONSTANTS.PAGE_SIZE,
+          }
+        }, 
+      },
+    });
+  } catch (e: any) {
+    fs.writeFileSync('./state.txt', JSON.stringify(state, null, 2));
+    if(e.message.includes('invalid json response')) {
+      state.queryErrors += 1;
+      return;
+    }
+    throw new Error(e);
+  }
+
+  if(response === undefined) {
+    fs.writeFileSync('./state.txt', JSON.stringify(state, null, 2));
+    return;
+  }
+
   const queryLength = (new Date().getTime() - beforeQuery) / CONSTANTS.ONE_SECOND;
   state.queryLength = state.queryLength ? (state.queryLength + queryLength) / 2 : queryLength;
   state.totalPages = response.total_pages;
