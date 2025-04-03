@@ -255,4 +255,4 @@ async function main() {
   fs.writeFileSync('./state.txt', JSON.stringify(state, null, 2));
 }
 
-main().catch((error:any) => {logger.error(error?.message, new Date());});
+main().catch((error:any) => {logger.error(JSON.stringify(error?.message), new Date());});
